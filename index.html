@@ -142,6 +142,28 @@
 			cursor: pointer;
 		}
 
+		input[type="number"] {
+			width: 80px;
+			background: var( --surface-2 );
+			border: 1px solid var( --border );
+			border-radius: 6px;
+			color: var( --text );
+			font-family: inherit;
+			font-size: 0.9rem;
+			padding: 5px 8px;
+			outline: none;
+			-moz-appearance: textfield;
+		}
+
+		input[type="number"]::-webkit-outer-spin-button,
+		input[type="number"]::-webkit-inner-spin-button {
+			-webkit-appearance: none;
+		}
+
+		input[type="number"]:focus {
+			border-color: var( --accent );
+		}
+
 		input[type="range"]::-moz-range-thumb {
 			width: 18px;
 			height: 18px;
@@ -379,6 +401,17 @@
 
 		<span class="quality-value" id="qualityValue">70</span>
 
+		<span class="quality-label" style="margin-left:8px">Breite</span>
+
+		<input
+			type="number"
+			id="widthInput"
+			min="1"
+			max="10000"
+			placeholder="px"
+			aria-label="Zielbreite in Pixeln (leer = Originalgröße)"
+		>
+
 	</div><!-- end /.controls -->
 
 	<div class="file-actions" id="fileActions">
@@ -400,6 +433,7 @@
 			const fileInput = document.getElementById( 'fileInput' );
 			const qualitySlider = document.getElementById( 'qualitySlider' );
 			const qualityValue = document.getElementById( 'qualityValue' );
+			const widthInput = document.getElementById( 'widthInput' );
 			const fileList = document.getElementById( 'fileList' );
 			const fileActions = document.getElementById( 'fileActions' );
 			const clearBtn = document.getElementById( 'clearBtn' );
@@ -448,6 +482,7 @@
 			function handleFiles( rawFiles ) {
 
 				const quality = parseInt( qualitySlider.value, 10 ) / 100;
+				const targetWidth = parseInt( widthInput.value, 10 ) || 0;
 
 				Array.from( rawFiles ).forEach( ( file ) => {
 
@@ -459,14 +494,14 @@
 					const id = Date.now() + Math.random();
 					const item = addPendingItem( file, id );
 
-					convertToWebP( file, quality, id, item );
+					convertToWebP( file, quality, targetWidth, id, item );
 				});
 
 				updateActions();
 
 			}
 
-			function convertToWebP( file, quality, id, item ) {
+			function convertToWebP( file, quality, targetWidth, id, item ) {
 
 				const reader = new FileReader();
 
@@ -476,12 +511,29 @@
 
 					img.onload = () => {
 
+						const origW = img.naturalWidth;
+						const origH = img.naturalHeight;
+
+						// Determine output dimensions
+						let outW = origW;
+						let outH = origH;
+						let notUpscaled = false;
+
+						if ( targetWidth > 0 ) {
+							if ( targetWidth < origW ) {
+								outW = targetWidth;
+								outH = Math.round( origH * ( targetWidth / origW ) );
+							} else {
+								notUpscaled = true;
+							}
+						}
+
 						const canvas = document.createElement( 'canvas' );
-						canvas.width = img.naturalWidth;
-						canvas.height = img.naturalHeight;
+						canvas.width = outW;
+						canvas.height = outH;
 
 						const ctx = canvas.getContext( '2d' );
-						ctx.drawImage( img, 0, 0 );
+						ctx.drawImage( img, 0, 0, outW, outH );
 
 						canvas.toBlob( ( blob ) => {
 
@@ -495,7 +547,7 @@
 
 							files.push({ id, name: originalName, blob, url });
 
-							markDone( item, file, blob, url, originalName );
+							markDone( item, file, blob, url, originalName, origW, origH, outW, outH, notUpscaled );
 
 						}, 'image/webp', quality );
 
@@ -568,12 +620,21 @@
 
 			}
 
-			function markDone( item, originalFile, blob, url, webpName ) {
+			function markDone( item, originalFile, blob, url, webpName, origW, origH, outW, outH, notUpscaled ) {
 
 				const saving = Math.round( ( 1 - blob.size / originalFile.size ) * 100 );
 				const savingText = saving > 0
 					? `<span class="size-saving">−${ saving }%</span>`
 					: `<span style="color:var(--text-dim)">${ saving }%</span>`;
+
+				const resized = origW !== outW || origH !== outH;
+				const dimText = resized
+					? `<span class="size-arrow">·</span> ${ origW }×${ origH } <span class="size-arrow">→</span> ${ outW }×${ outH }`
+					: `<span class="size-arrow">·</span> ${ origW }×${ origH }`;
+
+				const notUpscaledText = notUpscaled
+					? `<span style="color:var(--text-dim)" title="Bild ist schmaler als Zielbreite">· Nicht vergrößert</span>`
+					: '';
 
 				const thumb = item.querySelector( '.file-item__thumb' );
 				thumb.innerHTML = `<img src="${ url }" alt="${ escapeHtml( webpName ) }">`;
@@ -583,6 +644,8 @@
 					<span class="size-arrow">→</span>
 					${ formatBytes( blob.size ) }
 					${ savingText }
+					${ dimText }
+					${ notUpscaledText }
 				`;
 
 				item.querySelector( '.file-item__status' ).remove();
