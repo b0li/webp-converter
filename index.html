@@ -348,6 +348,37 @@
 			color: var( --red );
 		}
 
+		/* Summary */
+
+		.summary {
+			max-width: 720px;
+			margin: 16px auto 0;
+			background: var( --surface );
+			border-radius: var( --radius );
+			border: 1px solid var( --border );
+			padding: 14px 20px;
+			display: none;
+			align-items: center;
+			gap: 10px;
+			font-size: 0.88rem;
+			flex-wrap: wrap;
+		}
+
+		.summary--visible {
+			display: flex;
+		}
+
+		.summary__count {
+			color: var( --text-dim );
+			margin-right: 4px;
+		}
+
+		.summary__saving {
+			color: var( --green );
+			font-weight: 700;
+			font-size: 1rem;
+		}
+
 		/* Progress */
 
 		.progress-bar {
@@ -421,6 +452,8 @@
 
 	<div class="file-list" id="fileList" role="list" aria-label="Konvertierte Dateien"></div><!-- end /.file-list -->
 
+	<div class="summary" id="summary" aria-live="polite"></div><!-- end /.summary -->
+
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
 	<script>
@@ -438,6 +471,7 @@
 			const fileActions = document.getElementById( 'fileActions' );
 			const clearBtn = document.getElementById( 'clearBtn' );
 			const downloadAllBtn = document.getElementById( 'downloadAllBtn' );
+			const summary = document.getElementById( 'summary' );
 
 			let files = [];
 
@@ -545,9 +579,10 @@
 							const originalName = file.name.replace( /\.[^.]+$/, '' ) + '.webp';
 							const url = URL.createObjectURL( blob );
 
-							files.push({ id, name: originalName, blob, url });
+							files.push({ id, name: originalName, blob, url, originalSize: file.size });
 
 							markDone( item, file, blob, url, originalName, origW, origH, outW, outH, notUpscaled );
+							updateSummary();
 
 						}, 'image/webp', quality );
 
@@ -685,6 +720,7 @@
 				}
 
 				updateActions();
+				updateSummary();
 
 			}
 
@@ -737,8 +773,35 @@
 				files = [];
 				fileList.innerHTML = '';
 				updateActions();
+				updateSummary();
 
 			});
+
+			function updateSummary() {
+
+				if ( files.length < 2 ) {
+					summary.classList.remove( 'summary--visible' );
+					return;
+				}
+
+				const totalBefore = files.reduce( ( acc, f ) => acc + f.originalSize, 0 );
+				const totalAfter = files.reduce( ( acc, f ) => acc + f.blob.size, 0 );
+				const saving = Math.round( ( 1 - totalAfter / totalBefore ) * 100 );
+				const savingSign = saving > 0 ? '−' : '';
+
+				summary.innerHTML = `
+					<span class="summary__count">${ files.length } Bilder</span>
+					<span class="size-arrow">·</span>
+					${ formatBytes( totalBefore ) }
+					<span class="size-arrow">→</span>
+					${ formatBytes( totalAfter ) }
+					<span class="size-arrow">·</span>
+					<span class="summary__saving">${ savingSign }${ Math.abs( saving ) }% gespart</span>
+				`;
+
+				summary.classList.add( 'summary--visible' );
+
+			}
 
 			// Utils
 
