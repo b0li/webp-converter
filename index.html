@@ -415,7 +415,7 @@
 		<div class="drop-zone__hint">JPG, PNG, GIF, AVIF, BMP · Mehrere Dateien gleichzeitig · Klicken zum Auswählen</div>
 	</div>
 
-	<input type="file" id="fileInput" multiple accept="image/*">
+	<input type="file" id="fileInput" multiple accept="image/*,.heic,.heif">
 
 	<div class="controls">
 
@@ -455,6 +455,7 @@
 	<div class="summary" id="summary" aria-live="polite"></div><!-- end /.summary -->
 
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 
 	<script>
 
@@ -537,64 +538,85 @@
 
 			function convertToWebP( file, quality, targetWidth, id, item ) {
 
+				const isHeic = /\.(heic|heif)$/i.test( file.name ) || file.type === 'image/heic' || file.type === 'image/heif';
+
+				if ( isHeic ) {
+					heic2any({ blob: file, toType: 'image/png' })
+						.then( ( convertedBlob ) => {
+							processImageBlob( convertedBlob, file, quality, targetWidth, id, item );
+						})
+						.catch( () => markError( item, 'HEIC konnte nicht gelesen werden' ) );
+					return;
+				}
+
 				const reader = new FileReader();
 
 				reader.onload = ( e ) => {
-
-					const img = new Image();
-
-					img.onload = () => {
-
-						const origW = img.naturalWidth;
-						const origH = img.naturalHeight;
-
-						// Determine output dimensions
-						let outW = origW;
-						let outH = origH;
-						let notUpscaled = false;
-
-						if ( targetWidth > 0 ) {
-							if ( targetWidth < origW ) {
-								outW = targetWidth;
-								outH = Math.round( origH * ( targetWidth / origW ) );
-							} else {
-								notUpscaled = true;
-							}
-						}
-
-						const canvas = document.createElement( 'canvas' );
-						canvas.width = outW;
-						canvas.height = outH;
-
-						const ctx = canvas.getContext( '2d' );
-						ctx.drawImage( img, 0, 0, outW, outH );
-
-						canvas.toBlob( ( blob ) => {
-
-							if ( ! blob ) {
-								markError( item, 'Konvertierung fehlgeschlagen' );
-								return;
-							}
-
-							const originalName = file.name.replace( /\.[^.]+$/, '' ) + '.webp';
-							const url = URL.createObjectURL( blob );
-
-							files.push({ id, name: originalName, blob, url, originalSize: file.size });
-
-							markDone( item, file, blob, url, originalName, origW, origH, outW, outH, notUpscaled );
-							updateSummary();
-
-						}, 'image/webp', quality );
-
-					};
-
-					img.onerror = () => markError( item, 'Bild konnte nicht geladen werden' );
-					img.src = e.target.result;
-
+					processImageBlob( new Blob( [e.target.result], { type: file.type } ), file, quality, targetWidth, id, item );
 				};
 
 				reader.onerror = () => markError( item, 'Datei konnte nicht gelesen werden' );
-				reader.readAsDataURL( file );
+				reader.readAsArrayBuffer( file );
+
+			}
+
+			function processImageBlob( sourceBlob, originalFile, quality, targetWidth, id, item ) {
+
+				const blobUrl = URL.createObjectURL( sourceBlob );
+				const img = new Image();
+
+				img.onload = () => {
+
+					URL.revokeObjectURL( blobUrl );
+
+					const origW = img.naturalWidth;
+					const origH = img.naturalHeight;
+
+					let outW = origW;
+					let outH = origH;
+					let notUpscaled = false;
+
+					if ( targetWidth > 0 ) {
+						if ( targetWidth < origW ) {
+							outW = targetWidth;
+							outH = Math.round( origH * ( targetWidth / origW ) );
+						} else {
+							notUpscaled = true;
+						}
+					}
+
+					const canvas = document.createElement( 'canvas' );
+					canvas.width = outW;
+					canvas.height = outH;
+
+					const ctx = canvas.getContext( '2d' );
+					ctx.drawImage( img, 0, 0, outW, outH );
+
+					canvas.toBlob( ( blob ) => {
+
+						if ( ! blob ) {
+							markError( item, 'Konvertierung fehlgeschlagen' );
+							return;
+						}
+
+						const originalName = originalFile.name.replace( /\.[^.]+$/, '' ) + '.webp';
+						const url = URL.createObjectURL( blob );
+
+						files.push({ id, name: originalName, blob, url, originalSize: originalFile.size });
+
+						markDone( item, originalFile, blob, url, originalName, origW, origH, outW, outH, notUpscaled );
+						updateSummary();
+
+					}, 'image/webp', quality );
+
+				};
+
+				img.onerror = () => {
+					URL.revokeObjectURL( blobUrl );
+					markError( item, 'Bild konnte nicht geladen werden' );
+				};
+
+				img.src = blobUrl;
 
 			}
 
