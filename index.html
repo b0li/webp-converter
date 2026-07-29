@@ -256,14 +256,44 @@
 			justify-content: center;
 			color: var( --text-dim );
 			font-size: 0.7rem;
-			overflow: hidden;
+			overflow: visible;
 			flex-shrink: 0;
+			position: relative;
 		}
 
 		.file-item__thumb img {
-			width: 100%;
-			height: 100%;
+			width: 52px;
+			height: 52px;
+			border-radius: 6px;
 			object-fit: cover;
+			display: block;
+		}
+
+		.file-item__preview {
+			position: absolute;
+			z-index: 30;
+			left: 0;
+			bottom: calc( 100% + 8px );
+			display: none;
+			padding: 4px;
+			background: var( --surface-2 );
+			border: 1px solid var( --border );
+			border-radius: 8px;
+			box-shadow: 0 12px 32px rgba( 0, 0, 0, 0.5 );
+			pointer-events: none;
+		}
+
+		.file-item__thumb:hover .file-item__preview {
+			display: block;
+		}
+
+		.file-item__preview img {
+			display: block;
+			max-width: min( 480px, 80vw );
+			max-height: 70vh;
+			width: auto;
+			height: auto;
+			border-radius: 4px;
 		}
 
 		.file-item__info {
@@ -700,7 +730,12 @@
 					: '';
 
 				const thumb = item.querySelector( '.file-item__thumb' );
-				thumb.innerHTML = `<img src="${ url }" alt="${ escapeHtml( webpName ) }">`;
+				thumb.innerHTML = `
+					<img src="${ url }" alt="${ escapeHtml( webpName ) }">
+					<div class="file-item__preview">
+						<img src="${ url }" alt="${ escapeHtml( webpName ) }">
+					</div>
+				`;
 
 				item.querySelector( '.file-item__original' ).textContent = originalFile.name;
 
